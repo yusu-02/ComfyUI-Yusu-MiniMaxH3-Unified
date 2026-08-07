@@ -222,8 +222,8 @@ class MiniMaxH3Unified(io.ComfyNode):
     def define_schema(cls):
         return io.Schema(
             node_id="MiniMaxH3Unified",
-            display_name="MiniMax H3 Unified",
-            category="MiniMax/H3",
+            display_name="Yusu MiniMax H3 Unified",
+            category="Yusu/MiniMax/H3",
             description="统一路由 MiniMax H3 FL2VA 与 Ref2VA，并支持节点内媒体上传。",
             inputs=[
                 io.DynamicCombo.Input(
