@@ -1,4 +1,4 @@
-# ComfyUI-MiniMaxH3-Unified
+# ComfyUI-Yusu-MiniMaxH3-Unified
 
 统一 MiniMax H3 的文生视频、首尾帧生视频与全模态参考视频工作流，并提供节点内图片、视频、音频上传与精确裁剪。
 
@@ -41,7 +41,7 @@
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone <你的 GitHub 仓库地址> ComfyUI-MiniMaxH3-Unified
+git clone https://github.com/yusu-02/ComfyUI-Yusu-MiniMaxH3-Unified.git
 ```
 
 ### 方法二：手动安装
@@ -52,7 +52,7 @@ git clone <你的 GitHub 仓库地址> ComfyUI-MiniMaxH3-Unified
 ```text
 ComfyUI/
 └── custom_nodes/
-    └── ComfyUI-MiniMaxH3-Unified/
+    └── ComfyUI-Yusu-MiniMaxH3-Unified/
         ├── __init__.py
         ├── nodes.py
         ├── media.py
@@ -64,7 +64,7 @@ ComfyUI/
 5. 在节点菜单中查找：
 
 ```text
-MiniMax / H3 / MiniMax H3 Unified
+Yusu / MiniMax / H3 / Yusu MiniMax H3 Unified
 ```
 
 升级旧版本时，建议先完整删除旧插件目录，再复制新版本，避免残留旧 JavaScript 或 Python 文件。
@@ -405,7 +405,7 @@ H3 时间维度必须满足 `17k+5`，因此节点会向上对齐帧数。面板
 ## 代码结构
 
 ```text
-ComfyUI-MiniMaxH3-Unified/
+ComfyUI-Yusu-MiniMaxH3-Unified/
 ├── __init__.py
 ├── media.py
 ├── nodes.py
@@ -429,26 +429,26 @@ ComfyUI-MiniMaxH3-Unified/
 
 ```bash
 python -m unittest discover \
-  -s custom_nodes/ComfyUI-MiniMaxH3-Unified/tests \
+  -s custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/tests \
   -v
 ```
 
 前端测试：
 
 ```bash
-node custom_nodes/ComfyUI-MiniMaxH3-Unified/tests/test_frontend.mjs
+node custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/tests/test_frontend.mjs
 ```
 
 语法检查：
 
 ```bash
 python -m py_compile \
-  custom_nodes/ComfyUI-MiniMaxH3-Unified/__init__.py \
-  custom_nodes/ComfyUI-MiniMaxH3-Unified/media.py \
-  custom_nodes/ComfyUI-MiniMaxH3-Unified/nodes.py
+  custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/__init__.py \
+  custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/media.py \
+  custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/nodes.py
 
 node --check \
-  custom_nodes/ComfyUI-MiniMaxH3-Unified/web/minimax_h3_unified.js
+  custom_nodes/ComfyUI-Yusu-MiniMaxH3-Unified/web/minimax_h3_unified.js
 ```
 
 ## 已知限制
