@@ -60,6 +60,7 @@ def _install_import_stubs() -> None:
 
     folder_paths = types.ModuleType("folder_paths")
     folder_paths.get_input_directory = lambda: str(PLUGIN_ROOT / "tests" / "runtime_tmp")
+    folder_paths.get_annotated_filepath = lambda name: str(Path(folder_paths.get_input_directory()) / name)
     sys.modules["folder_paths"] = folder_paths
 
     io = types.SimpleNamespace(
@@ -264,6 +265,16 @@ class PluginTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 media.validate_upload_name(name, "audio/wav")
         self.assertEqual(media.validate_upload_name("ok.flac", "application/octet-stream"), (".flac", "audio"))
+
+    def test_media_path_uses_comfyui_resolver(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / media.MEDIA_SUBDIR / "a.wav"
+            path.parent.mkdir()
+            path.touch()
+            with patch.object(media.folder_paths, "get_annotated_filepath", return_value=str(path)) as resolve:
+                self.assertEqual(media.resolve_media_path(f"{media.MEDIA_SUBDIR}/a.wav"), path.resolve())
+                resolve.assert_called_once_with(f"{media.MEDIA_SUBDIR}/a.wav")
 
     def test_generation_and_reference_limits(self):
         media.validate_generation_size(1344, 768)
@@ -696,6 +707,12 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("origin.serialize", js)
         self.assertIn("asyncio.to_thread(validate_uploaded_file", backend)
         self.assertIn("MAX_WAVEFORM_CACHE_ITEMS", js)
+        self.assertIn('[MEDIA_STATE_PROPERTY]: serialized', js)
+        self.assertIn("node.properties?.[MEDIA_STATE_PROPERTY]", js)
+        self.assertIn('durationWidget.value === ""', js)
+        self.assertIn("item.disabled = false", js)
+        self.assertIn("timeline.setPointerCapture", js)
+        self.assertIn("controls.onpointerdown", js)
 
 
 if __name__ == "__main__":

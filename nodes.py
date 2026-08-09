@@ -92,16 +92,6 @@ def autogrow_slots(prefix: str, values: io.Autogrow.Type | None) -> dict[str, An
     return resolved
 
 
-def _prepare_external_audio(value: dict[str, Any], slot: str) -> tuple[dict[str, Any], float]:
-    waveform = value.get("waveform")
-    sample_rate = int(value.get("sample_rate", 0))
-    if not torch.is_tensor(waveform) or waveform.ndim != 3 or sample_rate <= 0 or waveform.shape[-1] <= 0:
-        raise ValueError(f"{slot} 必须是非空 ComfyUI AUDIO")
-    duration = int(waveform.shape[-1]) / sample_rate
-    validate_reference_duration(duration, f"{slot}")
-    return normalize_audio_for_h3(value), duration
-
-
 def _prepare_audio_slots(
     slots: dict[str, Any],
 ) -> tuple[dict[str, dict[str, Any]], dict[str, float]]:
@@ -109,7 +99,13 @@ def _prepare_audio_slots(
     durations: dict[str, float] = {}
     for slot, value in slots.items():
         if isinstance(value, dict) and "waveform" in value:
-            audio, duration = _prepare_external_audio(value, slot)
+            waveform = value.get("waveform")
+            sample_rate = int(value.get("sample_rate", 0))
+            if not torch.is_tensor(waveform) or waveform.ndim != 3 or sample_rate <= 0 or waveform.shape[-1] <= 0:
+                raise ValueError(f"{slot} 必须是非空 ComfyUI AUDIO")
+            duration = int(waveform.shape[-1]) / sample_rate
+            validate_reference_duration(duration, slot)
+            audio = normalize_audio_for_h3(value)
         else:
             audio, duration = load_audio(value)
         prepared[slot] = audio
@@ -166,26 +162,6 @@ def _embedded_audio_duration_candidates(
     return durations
 
 
-def _normalize_manual_duration(value: float | int) -> float:
-    """Validate the public duration input, which is always expressed in seconds."""
-    try:
-        seconds = float(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError("duration 必须是有效秒数") from error
-    if not math.isfinite(seconds):
-        raise ValueError("duration 必须是有限数字")
-    if seconds < 0:
-        raise ValueError(f"duration 不能小于 0 秒；当前为 {seconds:.3f} 秒")
-    return seconds
-
-
-def _seconds_to_requested_frames(seconds: float) -> int:
-    raw_frames = seconds * FPS
-    if not math.isfinite(raw_frames):
-        raise ValueError("duration 数值过大，无法换算为帧数")
-    return max(0, int(round(raw_frames)))
-
-
 def _resolve_frame_count(
     duration_seconds: float,
     auto_length_from_audio: bool,
@@ -196,9 +172,19 @@ def _resolve_frame_count(
             raise ValueError("已启用按音频自动长度，但当前没有可用参考音频")
         seconds = max(float(value) for value in audio_durations)
     else:
-        seconds = _normalize_manual_duration(duration_seconds)
+        try:
+            seconds = float(duration_seconds)
+        except (TypeError, ValueError) as error:
+            raise ValueError("duration 必须是有效秒数") from error
+        if not math.isfinite(seconds):
+            raise ValueError("duration 必须是有限数字")
+        if seconds < 0:
+            raise ValueError(f"duration 不能小于 0 秒；当前为 {seconds:.3f} 秒")
 
-    requested_length = _seconds_to_requested_frames(seconds)
+    raw_frames = seconds * FPS
+    if not math.isfinite(raw_frames):
+        raise ValueError("duration 数值过大，无法换算为帧数")
+    requested_length = max(0, int(round(raw_frames)))
     frame_count, _video_latent_t, _audio_latent_t = temporal_shape(requested_length)
     return int(frame_count)
 
@@ -212,9 +198,7 @@ def _select_reference_audio(
     single object. The longest effective reference is the least surprising
     deterministic choice and is also the source used by automatic duration.
     """
-    if not ordered_audio:
-        return None
-    return max(ordered_audio, key=lambda item: item[2])[1]
+    return max(ordered_audio, key=lambda item: item[2])[1] if ordered_audio else None
 
 
 class MiniMaxH3Unified(io.ComfyNode):

@@ -14,10 +14,12 @@ const FILE_EXTENSIONS = {
 };
 const H3_FPS = 24;
 const MIN_OUTPUT_SECONDS = 0;
+const DEFAULT_DURATION_SECONDS = 124 / H3_FPS;
 const TRAINED_MAX_FRAMES = 362;
 const MIN_LEGACY_FRAME_VALUE = 107;
 const LEGACY_MAX_FRAME_VALUE = 362;
-const WORKFLOW_SCHEMA_VERSION = 20;
+const WORKFLOW_SCHEMA_VERSION = 21;
+const MEDIA_STATE_PROPERTY = "minimax_h3_unified_media_state";
 
 // Store only downsampled peaks, never decoded AudioBuffer objects. The old
 // implementation fetched and decoded every audio file again whenever the panel
@@ -68,11 +70,12 @@ function videoAudioAvailability(item) {
 
 function setWidgetDisabled(item, disabled) {
     if (!item) return;
-    item.disabled = Boolean(disabled);
+    // ponytail: keep widgets serializable on RunningHub; CSS blocks interaction.
+    item.disabled = false;
     const targets = [item.inputEl, item.element, item.domElement, item.el]
         .filter((candidate, index, all) => candidate && all.indexOf(candidate) === index);
     for (const target of targets) {
-        if ("disabled" in target) target.disabled = Boolean(disabled);
+        if ("disabled" in target) target.disabled = false;
         target.setAttribute?.("aria-disabled", disabled ? "true" : "false");
         target.classList?.toggle("h3u-widget-disabled", Boolean(disabled));
     }
@@ -84,6 +87,11 @@ function syncDurationControls(node) {
     const durationWidget = widget(node, "duration");
     const autoAvailable = mode === "omni_reference";
     const autoEnabled = autoAvailable && Boolean(autoWidget?.value);
+
+    const duration = Number(durationWidget?.value);
+    if (durationWidget && (durationWidget.value === "" || !Number.isFinite(duration) || duration < MIN_OUTPUT_SECONDS)) {
+        durationWidget.value = Number(DEFAULT_DURATION_SECONDS.toFixed(3));
+    }
 
     setWidgetDisabled(autoWidget, !autoAvailable);
     setWidgetDisabled(durationWidget, autoEnabled);
@@ -463,6 +471,7 @@ function hideWidget(widget) {
 
 function setState(node, stateWidget, state) {
     const serialized = JSON.stringify(state);
+    node.properties = { ...(node.properties || {}), [MEDIA_STATE_PROPERTY]: serialized };
     if (stateWidget.value === serialized) return;
     stateWidget.value = serialized;
     const pending = STATE_COMMIT_FRAMES.get(node);
@@ -543,6 +552,7 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
     const start = Number.isFinite(rawStart) ? Math.min(duration, Math.max(0, rawStart)) : 0;
     const end = Number.isFinite(rawEnd) ? Math.min(duration, Math.max(start, rawEnd)) : duration;
     const controls = element("div", { className: `h3u-track h3u-track-${kind}` });
+    controls.onpointerdown = controls.onmousedown = controls.ontouchstart = (event) => event.stopPropagation();
     const timeline = element("div", { className: "h3u-timeline" });
     const selection = element("div", { className: "h3u-track-selection" });
     const startRange = element("input", { type: "range", min: 0, max: duration, step: 0.001, value: start, className: "h3u-track-range h3u-track-start" });
@@ -578,6 +588,31 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
     };
     startRange.oninput = startNumber.onchange = () => update(startRange === document.activeElement ? startRange : startNumber, true);
     endRange.oninput = endNumber.onchange = () => update(endRange === document.activeElement ? endRange : endNumber, false);
+    timeline.onpointerdown = (event) => {
+        if (event.button != null && event.button !== 0) return;
+        event.stopPropagation();
+        const bounds = timeline.getBoundingClientRect();
+        const valueAt = (pointer) => duration * Math.min(1, Math.max(0, (pointer.clientX - bounds.left) / Math.max(1, bounds.width)));
+        const initial = valueAt(event);
+        const isStart = Math.abs(initial - Number(startRange.value)) <= Math.abs(initial - Number(endRange.value));
+        const move = (pointer) => {
+            pointer.stopPropagation();
+            const range = isStart ? startRange : endRange;
+            range.value = valueAt(pointer);
+            update(range, isStart);
+        };
+        const stop = (pointer) => {
+            pointer.stopPropagation();
+            timeline.removeEventListener("pointermove", move);
+            timeline.removeEventListener("pointerup", stop);
+            timeline.removeEventListener("pointercancel", stop);
+        };
+        timeline.setPointerCapture?.(event.pointerId);
+        timeline.addEventListener("pointermove", move);
+        timeline.addEventListener("pointerup", stop);
+        timeline.addEventListener("pointercancel", stop);
+        move(event);
+    };
     controls.append(
         element("div", { className: "h3u-track-head" }, [
             element("strong", { textContent: kind === "video" ? "视频轨道" : "音频轨道" }),
@@ -918,9 +953,12 @@ function buildPanel(node, stateWidget) {
     let audioStatusTags = [];
     let promptSourceUnsubscribe = () => {};
     const restoreState = () => {
-        state = normalizeState(stateWidget.value);
+        const widgetState = normalizeState(stateWidget.value);
+        const propertyState = normalizeState(node.properties?.[MEDIA_STATE_PROPERTY]);
+        state = Object.keys(widgetState).length ? widgetState : propertyState;
         const normalized = JSON.stringify(state);
         if (stateWidget.value !== normalized) stateWidget.value = normalized;
+        node.properties = { ...(node.properties || {}), [MEDIA_STATE_PROPERTY]: normalized };
     };
     restoreState();
     const root = element("div", { className: "h3u-panel-host" });
@@ -1137,9 +1175,18 @@ function buildPanel(node, stateWidget) {
     };
     const originalSerialize = node.onSerialize;
     node.onSerialize = function (info) {
-        node.properties = { ...(node.properties || {}), minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION };
+        const serializedState = JSON.stringify(normalizeState(stateWidget.value));
+        node.properties = {
+            ...(node.properties || {}),
+            minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION,
+            [MEDIA_STATE_PROPERTY]: serializedState,
+        };
         const result = originalSerialize?.apply(this, arguments);
-        info.properties = { ...(info.properties || {}), minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION };
+        info.properties = {
+            ...(info.properties || {}),
+            minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION,
+            [MEDIA_STATE_PROPERTY]: serializedState,
+        };
         return result;
     };
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(fitNode) : null;

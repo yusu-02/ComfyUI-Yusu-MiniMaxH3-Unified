@@ -101,17 +101,6 @@ def normalize_audio_for_h3(audio: dict[str, Any]) -> dict[str, Any]:
     return {"waveform": waveform, "sample_rate": sample_rate}
 
 
-def audio_metadata(slot: str, audio: dict[str, Any], duration: float) -> dict[str, Any]:
-    waveform = audio["waveform"]
-    return {
-        "slot": slot,
-        "duration": float(duration),
-        "sample_rate": int(audio["sample_rate"]),
-        "channels": int(waveform.shape[1]),
-        "source_samples": int(waveform.shape[-1]),
-    }
-
-
 def media_root() -> Path:
     input_root = Path(folder_paths.get_input_directory()).resolve()
     root = (input_root / MEDIA_SUBDIR).resolve()
@@ -125,9 +114,10 @@ def resolve_media_path(relative_path: str) -> Path:
     candidate = Path(relative_path)
     if candidate.is_absolute() or ".." in candidate.parts or candidate.parts[:1] != (MEDIA_SUBDIR,):
         raise ValueError(f"非法媒体路径：{relative_path}")
-    path = (Path(folder_paths.get_input_directory()) / candidate).resolve()
-    if not path.is_relative_to(media_root()):
-        raise ValueError(f"媒体路径越界：{relative_path}")
+    try:
+        path = Path(folder_paths.get_annotated_filepath(candidate.as_posix())).resolve()
+    except ValueError as error:
+        raise ValueError(f"媒体路径越界：{relative_path}") from error
     if not path.is_file():
         raise FileNotFoundError(f"媒体文件不存在：{relative_path}")
     return path

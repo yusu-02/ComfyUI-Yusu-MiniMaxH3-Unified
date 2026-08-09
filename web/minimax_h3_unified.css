@@ -111,11 +111,6 @@
   width:calc(100% - 16px);
   height:34px;
 }
-.h3u-wave {
-  width:100%;
-  height:70px;
-  background:#0d1015;
-}
 .h3u-button {
   background:#343944;
   color:#fff;
@@ -124,14 +119,7 @@
   padding:3px 8px;
   cursor:pointer;
 }
-.h3u-trim {
-  display:grid;
-  grid-template-columns:36px 1fr 74px;
-  gap:4px;
-  width:100%;
-  align-items:center;
-}
-.h3u-trim .h3u-button,.h3u-duration {
+.h3u-duration {
   grid-column:auto;
 }
 .h3u-number {

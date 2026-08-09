@@ -4,6 +4,15 @@
 
 > 本插件基于 ComfyUI 官方 `MiniMaxH3ImageToVideo` 与 `MiniMaxH3ReferenceToVideo` 节点进行封装，只负责输入组织、媒体处理和接口映射，不修改 MiniMax H3 的推理核心。
 
+## 2026-08-09 更新
+
+- 统一使用 ComfyUI 官方媒体路径解析，修复 RunningHub 上传音频后误报“媒体路径越界”。
+- 媒体槽位状态同时写入 widget 与节点属性，修复保存工作流后重新进入时素材记录丢失。
+- 自动音频时长模式不再提交空 `duration`，修复 RunningHub 的 FLOAT 参数校验错误。
+- 裁剪时间轴增加画布事件隔离与指针捕获，修复 RunningHub 中音视频裁剪标尺无法拖动。
+- 本地 ComfyUI 与 RunningHub 共用同一套前端逻辑，无需维护两个版本。
+- 删除未调用的后端函数、单调用包装及旧版裁剪样式，保持现有功能不变。
+
 ## 功能概览
 
 - 一个节点支持三种模式：
