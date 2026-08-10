@@ -732,6 +732,8 @@ class PluginTests(unittest.TestCase):
         self.assertIn("inspectResponse.status === 404 || inspectResponse.status === 405", js)
         self.assertIn("canvas.onpointerdown", js)
         self.assertIn("expandCollapsedAutogrowInputs", js)
+        self.assertIn("afterResize: syncPanelWidth", js)
+        self.assertIn("nodeWidth - 20", js)
         self.assertNotIn('api.fetchApi("/minimax_h3_unified/upload"', js)
 
 

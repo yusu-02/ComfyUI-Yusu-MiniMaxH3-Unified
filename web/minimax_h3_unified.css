@@ -1,9 +1,14 @@
 .h3u-panel-host {
+  width:100%;
+  min-width:0;
   height:auto!important;
   min-height:0!important;
   overflow:visible;
+  box-sizing:border-box;
 }
 .h3u-panel {
+  width:100%;
+  min-width:0;
   font:12px sans-serif;
   color:var(--fg-color,#ddd);
   padding:8px;

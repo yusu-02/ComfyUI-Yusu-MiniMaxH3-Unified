@@ -1017,19 +1017,26 @@ function buildPanel(node, stateWidget) {
     const content = element("div", { className: "h3u-panel" });
     root.append(content);
     const panelHeight = () => Math.max(24, Math.ceil(content.scrollHeight || content.getBoundingClientRect().height || 0) + 12);
+    const syncPanelWidth = () => {
+        const nodeWidth = Math.max(Number(node.size?.[0]) || 0, 560);
+        root.style.width = `${Math.max(0, nodeWidth - 20)}px`;
+    };
+    syncPanelWidth();
     const domWidget = node.addDOMWidget("h3_media_panel", "h3-media", root, {
         serialize: false,
         hideOnZoom: false,
         getMinHeight: panelHeight,
         getMaxHeight: panelHeight,
         getHeight: panelHeight,
+        afterResize: syncPanelWidth,
     });
-    domWidget.computeSize = (width) => [width, panelHeight()];
+    domWidget.computeSize = (width) => [Math.max(Number(width) || 0, 560), panelHeight()];
     const fitNode = () => {
         cancelAnimationFrame(resizeFrame);
         resizeFrame = requestAnimationFrame(() => {
             hideWidget(stateWidget);
             const width = Math.max(Number(node.size?.[0]) || 0, 560);
+            syncPanelWidth();
             // Old workflows can persist a very large node height. Cap the DOM
             // widget and compute from a collapsed height so LiteGraph does not
             // feed that stale height back into the new layout.
