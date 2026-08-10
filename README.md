@@ -1,7 +1,6 @@
-线上工作流：http://runninghub.cn/post/2086063010979864577/?inviteCode=rh-v1525
+cn线上工作流：http://runninghub.cn/post/2086063010979864577/?inviteCode=rh-v1525
        
-       
-       https://www.runninghub.ai/zh-cn/post/2086007179703197697/?inviteCode=rh-v1525
+ai线上工作流：https://www.runninghub.ai/zh-cn/post/2086007179703197697/?inviteCode=rh-v1525
 
 教程在B站/Youtube:在下鱼酥
 
