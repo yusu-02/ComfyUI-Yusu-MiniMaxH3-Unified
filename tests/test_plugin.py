@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import shutil
 import struct
 import sys
 import tempfile
@@ -302,6 +303,8 @@ class PluginTests(unittest.TestCase):
             self.assertEqual(loaded.shape, (1, 2, 3, 3))
 
     def test_ffprobe_validates_real_wav_without_pyav(self):
+        if shutil.which("ffprobe") is None:
+            self.skipTest("ffprobe is not installed")
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "sample.wav"
             with wave.open(str(path), "wb") as output:
@@ -706,6 +709,7 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("sendBeacon(", js)
         self.assertNotIn("origin.serialize", js)
         self.assertIn("asyncio.to_thread(validate_uploaded_file", backend)
+        self.assertIn('routes.post("/minimax_h3_unified/upload")(stale_frontend_upload)', backend)
         self.assertIn("MAX_WAVEFORM_CACHE_ITEMS", js)
         self.assertIn('[MEDIA_STATE_PROPERTY]: serialized', js)
         self.assertIn("node.properties?.[MEDIA_STATE_PROPERTY]", js)
@@ -715,6 +719,8 @@ class PluginTests(unittest.TestCase):
         self.assertIn("controls.onpointerdown", js)
         self.assertIn('api.fetchApi("/upload/image"', js)
         self.assertIn('api.fetchApi("/minimax_h3_unified/inspect"', js)
+        self.assertNotIn("uploadResponse.json()", js)
+        self.assertNotIn("inspectResponse.json()", js)
         self.assertIn("inspectResponse.status === 404 || inspectResponse.status === 405", js)
         self.assertIn("canvas.onpointerdown", js)
         self.assertIn("expandAutogrowContainers", js)

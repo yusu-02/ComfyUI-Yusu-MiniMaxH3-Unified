@@ -10,7 +10,7 @@ globalThis.h3Test = {
     migrateDurationInput, migrateWidgets, pruneModeInputs, normalizeOutputs,
     removeLegacyModelInputs, alignedFrameCountFromSeconds, roundHalfToEven,
     canonicalInputName, externalInputName, normalizeState, videoAudioAvailability,
-    expandAutogrowContainers,
+    expandAutogrowContainers, readJsonResponse,
 };`;
 eval(source);
 
@@ -126,6 +126,22 @@ assert.deepEqual(cloudNode.inputs.map((item) => [item.name, item.type]), [
     ["mode.ref_video_audios.ref_video_audio_0", "AUDIO"],
     ["mode.ref_audios.ref_audio_0", "AUDIO"],
 ]);
+
+assert.deepEqual(await h3Test.readJsonResponse({
+    ok: true,
+    status: 200,
+    text: async () => '{"name":"a.wav"}',
+}, "上传"), { name: "a.wav" });
+await assert.rejects(() => h3Test.readJsonResponse({
+    ok: false,
+    status: 500,
+    text: async () => "500 Internal Server Error",
+}, "上传"), /服务端响应异常/);
+await assert.rejects(() => h3Test.readJsonResponse({
+    ok: true,
+    status: 200,
+    text: async () => "not-json",
+}, "上传"), /服务端响应异常/);
 
 const css = fs.readFileSync(new URL("../web/minimax_h3_unified.css", import.meta.url), "utf8");
 assert.match(css, /grid-template-rows:22px 170px 30px/);

@@ -523,6 +523,20 @@ async function upload(accept) {
     return file ? uploadFile(file) : null;
 }
 
+async function readJsonResponse(response, label) {
+    const text = await response.text();
+    let result;
+    try { result = JSON.parse(text); } catch { result = null; }
+    if (!response.ok) {
+        if (result?.error) throw new Error(result.error);
+        throw new Error(`${label}失败 (${response.status})，服务端响应异常，请重启 ComfyUI 后重试`);
+    }
+    if (!result || Array.isArray(result) || typeof result !== "object") {
+        throw new Error(`${label}服务端响应异常 (${response.status})，请重启 ComfyUI 后重试`);
+    }
+    return result;
+}
+
 async function uploadFile(file) {
     const kind = fileKind(file);
     if (!kind) throw new Error("不支持的媒体文件格式");
@@ -532,8 +546,10 @@ async function uploadFile(file) {
     data.append("type", "input");
     data.append("subfolder", MEDIA_SUBDIR);
     const uploadResponse = await api.fetchApi("/upload/image", { method: "POST", body: data });
-    if (!uploadResponse.ok) throw new Error(`上传失败 (${uploadResponse.status})`);
-    const uploaded = await uploadResponse.json();
+    const uploaded = await readJsonResponse(uploadResponse, "上传");
+    if (typeof uploaded.name !== "string" || !uploaded.name) {
+        throw new Error("上传服务未返回文件名，请重启 ComfyUI 后重试");
+    }
     const path = [uploaded.subfolder, uploaded.name].filter(Boolean).join("/");
     const inspectResponse = await api.fetchApi("/minimax_h3_unified/inspect", {
         method: "POST",
@@ -544,10 +560,8 @@ async function uploadFile(file) {
         if (inspectResponse.status === 404 || inspectResponse.status === 405) {
             throw new Error("插件后端仍是旧版本，请完全重启 ComfyUI 后再刷新浏览器");
         }
-        const message = await inspectResponse.text();
-        throw new Error(message || `媒体检查失败 (${inspectResponse.status})`);
     }
-    const result = await inspectResponse.json();
+    const result = await readJsonResponse(inspectResponse, "媒体检查");
     return { ...result, name: file.name };
 }
 
