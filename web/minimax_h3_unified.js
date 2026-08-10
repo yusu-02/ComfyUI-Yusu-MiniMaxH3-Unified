@@ -18,7 +18,7 @@ const DEFAULT_DURATION_SECONDS = 124 / H3_FPS;
 const TRAINED_MAX_FRAMES = 362;
 const MIN_LEGACY_FRAME_VALUE = 107;
 const LEGACY_MAX_FRAME_VALUE = 362;
-const WORKFLOW_SCHEMA_VERSION = 22;
+const WORKFLOW_SCHEMA_VERSION = 23;
 const MEDIA_STATE_PROPERTY = "minimax_h3_unified_media_state";
 const MEDIA_SUBDIR = "minimax_h3_unified";
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
@@ -409,6 +409,28 @@ function migrateWidgets(info, savedVersion = 0) {
         values[durationIndex] = Number((legacyValue / H3_FPS).toFixed(3));
     }
     info.widgets_values = values;
+}
+
+function expandAutogrowContainers(node) {
+    const groups = {
+        ref_images: ["ref_image_0", "IMAGE"],
+        ref_videos: ["ref_video_0", "IMAGE"],
+        ref_video_audios: ["ref_video_audio_0", "AUDIO"],
+        ref_audios: ["ref_audio_0", "AUDIO"],
+    };
+    let changed = false;
+    node.inputs?.forEach((input) => {
+        const target = groups[canonicalInputName(input?.name)];
+        if (!target) return;
+        const [child, type] = target;
+        input.name = `${input.name}.${child}`;
+        input.type = type;
+        input.label = child;
+        input.localized_name = child;
+        changed = true;
+    });
+    if (changed) node.graph?.setDirtyCanvas?.(true, true);
+    return changed;
 }
 
 function pruneModeInputs(node) {
@@ -1116,6 +1138,7 @@ function buildPanel(node, stateWidget) {
             const result = original?.apply(this, arguments);
             requestAnimationFrame(() => {
                 removeLegacyModelInputs(node);
+                expandAutogrowContainers(node);
                 pruneModeInputs(node);
                 scheduleOriginalInputLabels(node);
                 syncDurationControls(node);
@@ -1157,6 +1180,7 @@ function buildPanel(node, stateWidget) {
         const result = originalInputAdded?.apply(this, arguments);
         requestAnimationFrame(() => {
             removeLegacyModelInputs(node);
+            expandAutogrowContainers(node);
             scheduleOriginalInputLabels(node);
         });
         return result;
@@ -1175,11 +1199,12 @@ function buildPanel(node, stateWidget) {
     node.onConfigure = function (info) {
         const savedVersion = Number(info?.properties?.minimax_h3_unified_version || 0);
         migrateDurationInput(info);
-                migrateWidgets(info, savedVersion);
+        migrateWidgets(info, savedVersion);
         const result = originalConfigure?.apply(this, arguments);
         normalizeOutputs(node);
         node.properties = { ...(node.properties || {}), minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION };
         removeLegacyModelInputs(node);
+        expandAutogrowContainers(node);
         pruneModeInputs(node);
         scheduleOriginalInputLabels(node);
         restoreState();
@@ -1245,6 +1270,7 @@ app.registerExtension({
         scheduleOriginalInputLabels(node);
         requestAnimationFrame(() => {
             removeLegacyModelInputs(node);
+            expandAutogrowContainers(node);
             pruneModeInputs(node);
             scheduleOriginalInputLabels(node);
         });

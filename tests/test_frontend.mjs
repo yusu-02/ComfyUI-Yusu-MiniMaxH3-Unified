@@ -10,6 +10,7 @@ globalThis.h3Test = {
     migrateDurationInput, migrateWidgets, pruneModeInputs, normalizeOutputs,
     removeLegacyModelInputs, alignedFrameCountFromSeconds, roundHalfToEven,
     canonicalInputName, externalInputName, normalizeState, videoAudioAvailability,
+    expandAutogrowContainers,
 };`;
 eval(source);
 
@@ -111,6 +112,20 @@ assert.equal(modeNode.inputs[2].link, 21);
 
 assert.deepEqual(h3Test.normalizeState("[1,2]"), {});
 assert.equal(h3Test.externalInputName("ref_audio_1"), "ref_audio_0");
+
+const cloudNode = graphNode([
+    { name: "mode.ref_images", type: "*" },
+    { name: "mode.ref_videos", type: "*" },
+    { name: "mode.ref_video_audios", type: "*" },
+    { name: "mode.ref_audios", type: "*" },
+]);
+assert.equal(h3Test.expandAutogrowContainers(cloudNode), true);
+assert.deepEqual(cloudNode.inputs.map((item) => [item.name, item.type]), [
+    ["mode.ref_images.ref_image_0", "IMAGE"],
+    ["mode.ref_videos.ref_video_0", "IMAGE"],
+    ["mode.ref_video_audios.ref_video_audio_0", "AUDIO"],
+    ["mode.ref_audios.ref_audio_0", "AUDIO"],
+]);
 
 const css = fs.readFileSync(new URL("../web/minimax_h3_unified.css", import.meta.url), "utf8");
 assert.match(css, /grid-template-rows:22px 170px 30px/);
