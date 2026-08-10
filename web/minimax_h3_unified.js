@@ -16,7 +16,6 @@ const H3_FPS = 24;
 const MIN_OUTPUT_SECONDS = 0;
 const DEFAULT_DURATION_SECONDS = 124 / H3_FPS;
 const TRAINED_MAX_FRAMES = 362;
-const MAX_REFERENCE_AUDIO_SECONDS = 15;
 const MIN_LEGACY_FRAME_VALUE = 107;
 const LEGACY_MAX_FRAME_VALUE = 362;
 const WORKFLOW_SCHEMA_VERSION = 23;
@@ -605,13 +604,7 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
     const rawStart = Number(item.trim_start || 0);
     const rawEnd = Number(item.trim_end || duration);
     const start = Number.isFinite(rawStart) ? Math.min(duration, Math.max(0, rawStart)) : 0;
-    const endLimit = kind === "audio" ? Math.min(duration, start + MAX_REFERENCE_AUDIO_SECONDS) : duration;
-    const end = Number.isFinite(rawEnd) ? Math.min(endLimit, Math.max(start, rawEnd)) : endLimit;
-    if (Number(item.trim_start) !== start || Number(item.trim_end) !== end) {
-        item.trim_start = start;
-        item.trim_end = end;
-        setState(node, stateWidget, state);
-    }
+    const end = Number.isFinite(rawEnd) ? Math.min(duration, Math.max(start, rawEnd)) : duration;
     const controls = element("div", { className: `h3u-track h3u-track-${kind}` });
     controls.onpointerdown = controls.onmousedown = controls.ontouchstart = (event) => event.stopPropagation();
     const timeline = element("div", { className: "h3u-timeline" });
@@ -635,10 +628,6 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
         let value = Math.min(duration, Math.max(0, Number(source.value) || 0));
         if (isStart) value = Math.min(value, Number(endRange.value) - 0.001);
         else value = Math.max(value, Number(startRange.value) + 0.001);
-        if (kind === "audio") {
-            if (isStart) value = Math.max(value, Number(endRange.value) - MAX_REFERENCE_AUDIO_SECONDS);
-            else value = Math.min(value, Number(startRange.value) + MAX_REFERENCE_AUDIO_SECONDS);
-        }
         (isStart ? startRange : endRange).value = value;
         (isStart ? startNumber : endNumber).value = value.toFixed(3);
         item[isStart ? "trim_start" : "trim_end"] = value;
@@ -704,11 +693,10 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
         controls.append(element("div", { className: "h3u-track-actions" }, [play, button("暂停", () => media.pause())]));
     }
     controls.querySelector(".h3u-track-actions")?.append(button("重置", () => {
-        const resetEnd = kind === "audio" ? Math.min(duration, MAX_REFERENCE_AUDIO_SECONDS) : duration;
         startRange.value = startNumber.value = 0;
-        endRange.value = endNumber.value = resetEnd;
+        endRange.value = endNumber.value = duration;
         item.trim_start = 0;
-        item.trim_end = resetEnd;
+        item.trim_end = duration;
         syncTrack();
         setState(node, stateWidget, state);
     }));
@@ -838,10 +826,7 @@ function mediaRow(node, stateWidget, state, slot, kind, rerender) {
             if (uploaded.kind !== kind) {
                 throw new Error(`该槽位需要${kind === "image" ? "图片" : kind === "video" ? "视频" : "音频"}，实际上传的是${uploaded.kind || "未知媒体"}`);
             }
-            const trimEnd = kind === "audio"
-                ? Math.min(Number(uploaded.duration || 0), MAX_REFERENCE_AUDIO_SECONDS)
-                : uploaded.duration || 0;
-            state[slot] = { ...uploaded, trim_start: 0, trim_end: trimEnd, use_audio: false };
+            state[slot] = { ...uploaded, trim_start: 0, trim_end: uploaded.duration || 0, use_audio: false };
             setState(node, stateWidget, state);
             rerender();
         } catch (error) {
