@@ -10,7 +10,7 @@ globalThis.h3Test = {
     migrateDurationInput, migrateWidgets, pruneModeInputs, normalizeOutputs,
     removeLegacyModelInputs, alignedFrameCountFromSeconds, roundHalfToEven,
     canonicalInputName, externalInputName, normalizeState, videoAudioAvailability,
-    expandAutogrowContainers, readJsonResponse,
+    readJsonResponse, syncDurationControls, expandCollapsedAutogrowInputs,
 };`;
 eval(source);
 
@@ -31,6 +31,17 @@ assert.equal(h3Test.alignedFrameCountFromSeconds(20), 481);
 assert.equal(h3Test.roundHalfToEven(124.5), 124);
 assert.equal(h3Test.roundHalfToEven(125.5), 126);
 assert.equal(h3Test.videoAudioAvailability({ has_audio: false }), "absent");
+
+const durationNode = {
+    widgets: [
+        { name: "mode", value: "omni_reference" },
+        { name: "auto_length_from_audio", value: true },
+        { name: "duration", value: 5 },
+    ],
+    graph: { setDirtyCanvas() {} },
+};
+h3Test.syncDurationControls(durationNode);
+assert.equal(durationNode.widgets[2].disabled, true);
 
 function graphNode(inputs, outputs = []) {
     return {
@@ -113,18 +124,20 @@ assert.equal(modeNode.inputs[2].link, 21);
 assert.deepEqual(h3Test.normalizeState("[1,2]"), {});
 assert.equal(h3Test.externalInputName("ref_audio_1"), "ref_audio_0");
 
-const cloudNode = graphNode([
+const collapsedNode = graphNode([
     { name: "mode.ref_images", type: "*" },
     { name: "mode.ref_videos", type: "*" },
     { name: "mode.ref_video_audios", type: "*" },
     { name: "mode.ref_audios", type: "*" },
+    { name: "mode.ref_images.ref_image_1", type: "IMAGE" },
 ]);
-assert.equal(h3Test.expandAutogrowContainers(cloudNode), true);
-assert.deepEqual(cloudNode.inputs.map((item) => [item.name, item.type]), [
+assert.equal(h3Test.expandCollapsedAutogrowInputs(collapsedNode), true);
+assert.deepEqual(collapsedNode.inputs.map((item) => [item.name, item.type]), [
     ["mode.ref_images.ref_image_0", "IMAGE"],
     ["mode.ref_videos.ref_video_0", "IMAGE"],
     ["mode.ref_video_audios.ref_video_audio_0", "AUDIO"],
     ["mode.ref_audios.ref_audio_0", "AUDIO"],
+    ["mode.ref_images.ref_image_1", "IMAGE"],
 ]);
 
 assert.deepEqual(await h3Test.readJsonResponse({

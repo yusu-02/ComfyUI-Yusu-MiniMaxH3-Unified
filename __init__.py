@@ -49,17 +49,9 @@ async def inspect_media(request: web.Request) -> web.Response:
         return web.json_response({"error": "媒体检查失败，请查看 ComfyUI 控制台日志"}, status=500)
 
 
-async def stale_frontend_upload(_request: web.Request) -> web.Response:
-    return web.json_response(
-        {"error": "插件前端仍是旧版本，请按 Ctrl+F5 强制刷新浏览器后重试"},
-        status=409,
-    )
-
-
 server_instance = getattr(PromptServer, "instance", None)
 if server_instance is not None:
     server_instance.routes.post("/minimax_h3_unified/inspect")(inspect_media)
-    server_instance.routes.post("/minimax_h3_unified/upload")(stale_frontend_upload)
 
 
 __all__ = ["WEB_DIRECTORY", "comfy_entrypoint"]

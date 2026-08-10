@@ -284,6 +284,7 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(media.official_reference_frame_count(362, 124), 124)
         self.assertEqual(media.official_reference_frame_count(120, 120), 107)
         media.validate_reference_limits({"a": 1}, {}, {}, {}, [], [])
+        media.validate_reference_limits({"a": 1}, {}, {}, {"ref_audio_1": audio(21.838)}, [], [21.838])
         with self.assertRaisesRegex(ValueError, "唯一参考"):
             media.validate_reference_limits({}, {}, {}, {"ref_audio_1": audio()}, [], [2.0])
         with self.assertRaisesRegex(ValueError, "同编号视频"):
@@ -709,12 +710,10 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("sendBeacon(", js)
         self.assertNotIn("origin.serialize", js)
         self.assertIn("asyncio.to_thread(validate_uploaded_file", backend)
-        self.assertIn('routes.post("/minimax_h3_unified/upload")(stale_frontend_upload)', backend)
+        self.assertNotIn('routes.post("/minimax_h3_unified/upload")', backend)
         self.assertIn("MAX_WAVEFORM_CACHE_ITEMS", js)
-        self.assertIn('[MEDIA_STATE_PROPERTY]: serialized', js)
-        self.assertIn("node.properties?.[MEDIA_STATE_PROPERTY]", js)
         self.assertIn('durationWidget.value === ""', js)
-        self.assertIn("item.disabled = false", js)
+        self.assertIn("item.disabled = Boolean(disabled)", js)
         self.assertIn("timeline.setPointerCapture", js)
         self.assertIn("controls.onpointerdown", js)
         self.assertIn('api.fetchApi("/upload/image"', js)
@@ -723,7 +722,7 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("inspectResponse.json()", js)
         self.assertIn("inspectResponse.status === 404 || inspectResponse.status === 405", js)
         self.assertIn("canvas.onpointerdown", js)
-        self.assertIn("expandAutogrowContainers", js)
+        self.assertIn("expandCollapsedAutogrowInputs", js)
         self.assertNotIn('api.fetchApi("/minimax_h3_unified/upload"', js)
 
 

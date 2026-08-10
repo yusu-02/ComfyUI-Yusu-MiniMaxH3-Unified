@@ -22,6 +22,7 @@ from .media import (
     normalize_audio_for_h3,
     validate_generation_size,
     validate_image_tensor,
+    validate_reference_audio_duration,
     validate_reference_duration,
     validate_reference_limits,
 )
@@ -104,7 +105,7 @@ def _prepare_audio_slots(
             if not torch.is_tensor(waveform) or waveform.ndim != 3 or sample_rate <= 0 or waveform.shape[-1] <= 0:
                 raise ValueError(f"{slot} 必须是非空 ComfyUI AUDIO")
             duration = int(waveform.shape[-1]) / sample_rate
-            validate_reference_duration(duration, slot)
+            validate_reference_audio_duration(duration, slot)
             audio = normalize_audio_for_h3(value)
         else:
             audio, duration = load_audio(value)
@@ -138,7 +139,7 @@ def _state_trim_duration(item: dict[str, Any], label: str) -> float:
     duration = end - start
     if duration <= 0:
         raise ValueError(f"{label}裁剪区间无效：{start:.3f}s–{end:.3f}s")
-    validate_reference_duration(duration, label)
+    validate_reference_audio_duration(duration, label)
     return duration
 
 
@@ -448,7 +449,7 @@ class MiniMaxH3Unified(io.ComfyNode):
             paired_slot = slot.replace("ref_video_", "ref_video_audio_")
             if paired_slot not in paired_audio and soundtrack is not None:
                 soundtrack_duration = int(soundtrack["waveform"].shape[-1]) / int(soundtrack["sample_rate"])
-                validate_reference_duration(soundtrack_duration, paired_slot)
+                validate_reference_audio_duration(soundtrack_duration, paired_slot)
                 paired_audio[paired_slot] = soundtrack
                 paired_duration_by_slot[paired_slot] = soundtrack_duration
                 embedded_audio_count += 1

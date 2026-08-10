@@ -19,7 +19,6 @@ const TRAINED_MAX_FRAMES = 362;
 const MIN_LEGACY_FRAME_VALUE = 107;
 const LEGACY_MAX_FRAME_VALUE = 362;
 const WORKFLOW_SCHEMA_VERSION = 23;
-const MEDIA_STATE_PROPERTY = "minimax_h3_unified_media_state";
 const MEDIA_SUBDIR = "minimax_h3_unified";
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
@@ -72,12 +71,11 @@ function videoAudioAvailability(item) {
 
 function setWidgetDisabled(item, disabled) {
     if (!item) return;
-    // ponytail: keep widgets serializable on RunningHub; CSS blocks interaction.
-    item.disabled = false;
+    item.disabled = Boolean(disabled);
     const targets = [item.inputEl, item.element, item.domElement, item.el]
         .filter((candidate, index, all) => candidate && all.indexOf(candidate) === index);
     for (const target of targets) {
-        if ("disabled" in target) target.disabled = false;
+        if ("disabled" in target) target.disabled = Boolean(disabled);
         target.setAttribute?.("aria-disabled", disabled ? "true" : "false");
         target.classList?.toggle("h3u-widget-disabled", Boolean(disabled));
     }
@@ -411,7 +409,7 @@ function migrateWidgets(info, savedVersion = 0) {
     info.widgets_values = values;
 }
 
-function expandAutogrowContainers(node) {
+function expandCollapsedAutogrowInputs(node) {
     const groups = {
         ref_images: ["ref_image_0", "IMAGE"],
         ref_videos: ["ref_video_0", "IMAGE"],
@@ -495,7 +493,6 @@ function hideWidget(widget) {
 
 function setState(node, stateWidget, state) {
     const serialized = JSON.stringify(state);
-    node.properties = { ...(node.properties || {}), [MEDIA_STATE_PROPERTY]: serialized };
     if (stateWidget.value === serialized) return;
     stateWidget.value = serialized;
     const pending = STATE_COMMIT_FRAMES.get(node);
@@ -1011,12 +1008,9 @@ function buildPanel(node, stateWidget) {
     let audioStatusTags = [];
     let promptSourceUnsubscribe = () => {};
     const restoreState = () => {
-        const widgetState = normalizeState(stateWidget.value);
-        const propertyState = normalizeState(node.properties?.[MEDIA_STATE_PROPERTY]);
-        state = Object.keys(widgetState).length ? widgetState : propertyState;
+        state = normalizeState(stateWidget.value);
         const normalized = JSON.stringify(state);
         if (stateWidget.value !== normalized) stateWidget.value = normalized;
-        node.properties = { ...(node.properties || {}), [MEDIA_STATE_PROPERTY]: normalized };
     };
     restoreState();
     const root = element("div", { className: "h3u-panel-host" });
@@ -1158,7 +1152,7 @@ function buildPanel(node, stateWidget) {
             const result = original?.apply(this, arguments);
             requestAnimationFrame(() => {
                 removeLegacyModelInputs(node);
-                expandAutogrowContainers(node);
+                expandCollapsedAutogrowInputs(node);
                 pruneModeInputs(node);
                 scheduleOriginalInputLabels(node);
                 syncDurationControls(node);
@@ -1200,7 +1194,7 @@ function buildPanel(node, stateWidget) {
         const result = originalInputAdded?.apply(this, arguments);
         requestAnimationFrame(() => {
             removeLegacyModelInputs(node);
-            expandAutogrowContainers(node);
+            expandCollapsedAutogrowInputs(node);
             scheduleOriginalInputLabels(node);
         });
         return result;
@@ -1224,7 +1218,7 @@ function buildPanel(node, stateWidget) {
         normalizeOutputs(node);
         node.properties = { ...(node.properties || {}), minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION };
         removeLegacyModelInputs(node);
-        expandAutogrowContainers(node);
+        expandCollapsedAutogrowInputs(node);
         pruneModeInputs(node);
         scheduleOriginalInputLabels(node);
         restoreState();
@@ -1232,22 +1226,6 @@ function buildPanel(node, stateWidget) {
         bindPromptSource();
         syncDurationControls(node);
         scheduleRender();
-        return result;
-    };
-    const originalSerialize = node.onSerialize;
-    node.onSerialize = function (info) {
-        const serializedState = JSON.stringify(normalizeState(stateWidget.value));
-        node.properties = {
-            ...(node.properties || {}),
-            minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION,
-            [MEDIA_STATE_PROPERTY]: serializedState,
-        };
-        const result = originalSerialize?.apply(this, arguments);
-        info.properties = {
-            ...(info.properties || {}),
-            minimax_h3_unified_version: WORKFLOW_SCHEMA_VERSION,
-            [MEDIA_STATE_PROPERTY]: serializedState,
-        };
         return result;
     };
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(fitNode) : null;
@@ -1290,7 +1268,7 @@ app.registerExtension({
         scheduleOriginalInputLabels(node);
         requestAnimationFrame(() => {
             removeLegacyModelInputs(node);
-            expandAutogrowContainers(node);
+            expandCollapsedAutogrowInputs(node);
             pruneModeInputs(node);
             scheduleOriginalInputLabels(node);
         });
