@@ -284,7 +284,16 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(media.official_reference_frame_count(362, 124), 124)
         self.assertEqual(media.official_reference_frame_count(120, 120), 107)
         media.validate_reference_limits({"a": 1}, {}, {}, {}, [], [])
-        media.validate_reference_limits({"a": 1}, {}, {}, {"ref_audio_1": audio(21.838)}, [], [21.838])
+        media.validate_reference_limits(
+            {"a": 1},
+            {},
+            {},
+            {"ref_audio_1": audio(10), "ref_audio_2": audio(10)},
+            [],
+            [10, 10],
+        )
+        with self.assertRaisesRegex(ValueError, "2–15"):
+            media.validate_reference_limits({"a": 1}, {}, {}, {"ref_audio_1": audio(15.001)}, [], [15.001])
         with self.assertRaisesRegex(ValueError, "唯一参考"):
             media.validate_reference_limits({}, {}, {}, {"ref_audio_1": audio()}, [], [2.0])
         with self.assertRaisesRegex(ValueError, "同编号视频"):

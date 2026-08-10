@@ -80,8 +80,8 @@ def validate_reference_duration(duration: float, label: str = "参考媒体") ->
 
 
 def validate_reference_audio_duration(duration: float, label: str = "参考音频") -> None:
-    if not np.isfinite(duration) or duration <= 0:
-        raise ValueError(f"{label}必须包含有效音频")
+    if not np.isfinite(duration) or not MIN_REFERENCE_SECONDS <= duration <= MAX_REFERENCE_SECONDS:
+        raise ValueError(f"{label}必须为 {MIN_REFERENCE_SECONDS:g}–{MAX_REFERENCE_SECONDS:g} 秒")
 
 
 def normalize_audio_for_h3(audio: dict[str, Any]) -> dict[str, Any]:
