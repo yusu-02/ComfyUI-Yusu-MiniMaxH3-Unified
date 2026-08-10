@@ -112,7 +112,8 @@ def media_root() -> Path:
 
 def resolve_media_path(relative_path: str) -> Path:
     candidate = Path(relative_path)
-    if candidate.is_absolute() or ".." in candidate.parts or candidate.parts[:1] != (MEDIA_SUBDIR,):
+    annotated = relative_path.endswith(("[input]", "[output]", "[temp]"))
+    if candidate.is_absolute() or ".." in candidate.parts or not candidate.parts or annotated:
         raise ValueError(f"非法媒体路径：{relative_path}")
     try:
         path = Path(folder_paths.get_annotated_filepath(candidate.as_posix())).resolve()

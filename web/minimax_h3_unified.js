@@ -18,8 +18,10 @@ const DEFAULT_DURATION_SECONDS = 124 / H3_FPS;
 const TRAINED_MAX_FRAMES = 362;
 const MIN_LEGACY_FRAME_VALUE = 107;
 const LEGACY_MAX_FRAME_VALUE = 362;
-const WORKFLOW_SCHEMA_VERSION = 21;
+const WORKFLOW_SCHEMA_VERSION = 22;
 const MEDIA_STATE_PROPERTY = "minimax_h3_unified_media_state";
+const MEDIA_SUBDIR = "minimax_h3_unified";
+const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 // Store only downsampled peaks, never decoded AudioBuffer objects. The old
 // implementation fetched and decoded every audio file again whenever the panel
@@ -500,12 +502,25 @@ async function upload(accept) {
 }
 
 async function uploadFile(file) {
+    const kind = fileKind(file);
+    if (!kind) throw new Error("不支持的媒体文件格式");
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error("文件超过 512 MiB 上限");
     const data = new FormData();
-    data.append("file", file);
-    const response = await api.fetchApi("/minimax_h3_unified/upload", { method: "POST", body: data });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `上传失败 (${response.status})`);
-    return result;
+    data.append("image", file);
+    data.append("type", "input");
+    data.append("subfolder", MEDIA_SUBDIR);
+    const uploadResponse = await api.fetchApi("/upload/image", { method: "POST", body: data });
+    if (!uploadResponse.ok) throw new Error(`上传失败 (${uploadResponse.status})`);
+    const uploaded = await uploadResponse.json();
+    const path = [uploaded.subfolder, uploaded.name].filter(Boolean).join("/");
+    const inspectResponse = await api.fetchApi("/minimax_h3_unified/inspect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, kind, mime: file.type }),
+    });
+    const result = await inspectResponse.json();
+    if (!inspectResponse.ok) throw new Error(result.error || `媒体检查失败 (${inspectResponse.status})`);
+    return { ...result, name: file.name };
 }
 
 function dropZone(kind, choose) {
@@ -562,6 +577,7 @@ function trimControls(node, stateWidget, state, slot, item, media, kind, url) {
     const durationText = element("span", { className: "h3u-duration" });
     if (kind === "audio") {
         const canvas = element("canvas", { width: 1000, height: 70, className: "h3u-track-wave" });
+        canvas.onpointerdown = (event) => event.stopPropagation();
         timeline.append(canvas);
         setupWaveformPreview(canvas, url, item);
     } else {

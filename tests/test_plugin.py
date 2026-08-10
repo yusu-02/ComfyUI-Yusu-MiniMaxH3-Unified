@@ -269,12 +269,12 @@ class PluginTests(unittest.TestCase):
     def test_media_path_uses_comfyui_resolver(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            path = root / media.MEDIA_SUBDIR / "a.wav"
+            path = root / "api" / "a.wav"
             path.parent.mkdir()
             path.touch()
             with patch.object(media.folder_paths, "get_annotated_filepath", return_value=str(path)) as resolve:
-                self.assertEqual(media.resolve_media_path(f"{media.MEDIA_SUBDIR}/a.wav"), path.resolve())
-                resolve.assert_called_once_with(f"{media.MEDIA_SUBDIR}/a.wav")
+                self.assertEqual(media.resolve_media_path("api/a.wav"), path.resolve())
+                resolve.assert_called_once_with("api/a.wav")
 
     def test_generation_and_reference_limits(self):
         media.validate_generation_size(1344, 768)
@@ -713,6 +713,10 @@ class PluginTests(unittest.TestCase):
         self.assertIn("item.disabled = false", js)
         self.assertIn("timeline.setPointerCapture", js)
         self.assertIn("controls.onpointerdown", js)
+        self.assertIn('api.fetchApi("/upload/image"', js)
+        self.assertIn('api.fetchApi("/minimax_h3_unified/inspect"', js)
+        self.assertIn("canvas.onpointerdown", js)
+        self.assertNotIn('api.fetchApi("/minimax_h3_unified/upload"', js)
 
 
 if __name__ == "__main__":
