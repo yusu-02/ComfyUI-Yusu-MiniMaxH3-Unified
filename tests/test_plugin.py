@@ -715,6 +715,7 @@ class PluginTests(unittest.TestCase):
         self.assertIn("controls.onpointerdown", js)
         self.assertIn('api.fetchApi("/upload/image"', js)
         self.assertIn('api.fetchApi("/minimax_h3_unified/inspect"', js)
+        self.assertIn("inspectResponse.status === 404 || inspectResponse.status === 405", js)
         self.assertIn("canvas.onpointerdown", js)
         self.assertIn("expandAutogrowContainers", js)
         self.assertNotIn('api.fetchApi("/minimax_h3_unified/upload"', js)

@@ -540,8 +540,14 @@ async function uploadFile(file) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path, kind, mime: file.type }),
     });
+    if (!inspectResponse.ok) {
+        if (inspectResponse.status === 404 || inspectResponse.status === 405) {
+            throw new Error("插件后端仍是旧版本，请完全重启 ComfyUI 后再刷新浏览器");
+        }
+        const message = await inspectResponse.text();
+        throw new Error(message || `媒体检查失败 (${inspectResponse.status})`);
+    }
     const result = await inspectResponse.json();
-    if (!inspectResponse.ok) throw new Error(result.error || `媒体检查失败 (${inspectResponse.status})`);
     return { ...result, name: file.name };
 }
 
