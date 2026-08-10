@@ -1,3 +1,8 @@
+线上工作流：http://runninghub.cn/post/2086063010979864577/?inviteCode=rh-v1525
+       https://www.runninghub.ai/zh-cn/post/2086007179703197697/?inviteCode=rh-v1525
+教程在B站/Youtube:在下鱼酥
+
+
 # ComfyUI-Yusu-MiniMaxH3-Unified
 
 统一 MiniMax H3 的文生视频、首尾帧生视频与全模态参考视频工作流，并提供节点内图片、视频、音频上传与精确裁剪。
