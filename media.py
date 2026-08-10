@@ -79,11 +79,6 @@ def validate_reference_duration(duration: float, label: str = "参考媒体") ->
         raise ValueError(f"{label}必须为 {MIN_REFERENCE_SECONDS:g}–{MAX_REFERENCE_SECONDS:g} 秒")
 
 
-def validate_reference_audio_duration(duration: float, label: str = "参考音频") -> None:
-    if not np.isfinite(duration) or not MIN_REFERENCE_SECONDS <= duration <= MAX_REFERENCE_SECONDS:
-        raise ValueError(f"{label}必须为 {MIN_REFERENCE_SECONDS:g}–{MAX_REFERENCE_SECONDS:g} 秒")
-
-
 def normalize_audio_for_h3(audio: dict[str, Any]) -> dict[str, Any]:
     waveform = audio["waveform"]
     sample_rate = int(audio["sample_rate"])
@@ -104,15 +99,6 @@ def normalize_audio_for_h3(audio: dict[str, Any]) -> dict[str, Any]:
     if float(waveform.abs().amax().item()) <= 1e-7:
         raise ValueError("裁剪后的参考音频是静音，模型无法从中提取有效参考")
     return {"waveform": waveform, "sample_rate": sample_rate}
-
-
-def media_root() -> Path:
-    input_root = Path(folder_paths.get_input_directory()).resolve()
-    root = (input_root / MEDIA_SUBDIR).resolve()
-    if not root.is_relative_to(input_root):
-        raise ValueError(f"媒体目录越界：{root}")
-    root.mkdir(parents=True, exist_ok=True)
-    return root
 
 
 def resolve_media_path(relative_path: str) -> Path:
@@ -422,7 +408,7 @@ def load_audio(item: dict[str, Any]) -> tuple[dict[str, Any], float]:
         if requested_end <= requested_start:
             raise ValueError(f"无效音频裁剪区间：{requested_start:.3f}s–{requested_end:.3f}s")
         target_duration = requested_end - requested_start
-        validate_reference_audio_duration(target_duration, "每段参考音频")
+        validate_reference_duration(target_duration, "每段参考音频")
 
         offset = 0.0
         if align_to_video:
@@ -635,7 +621,7 @@ def validate_reference_limits(
     if sum(video_durations) > MAX_REFERENCE_SECONDS + 1e-6:
         raise ValueError("参考视频总时长不能超过 15 秒")
     for duration in audio_durations:
-        validate_reference_audio_duration(duration)
+        validate_reference_duration(duration, "参考音频")
     file_count = len(images) + len(videos) + len(audios) + len(paired_audio) - embedded_audio_count
     if file_count > 12:
         raise ValueError("Ref2VA 混合参考文件总数不能超过 12")
