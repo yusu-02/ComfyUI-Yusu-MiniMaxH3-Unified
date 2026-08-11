@@ -86,16 +86,11 @@ def normalize_audio_for_h3(audio: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("参考音频必须是非空 waveform [B,C,L] 和正采样率")
     if sample_rate > MAX_AUDIO_SAMPLE_RATE:
         raise ValueError(f"参考音频采样率过高：{sample_rate} Hz")
-    channels = int(waveform.shape[1])
-    if channels == 1:
-        waveform = waveform[:1, :1, :].to(dtype=torch.float32).expand(-1, 2, -1).clone()
-    elif channels >= 2:
-        waveform = waveform[:1, :2, :].to(dtype=torch.float32)
-    else:
+    if waveform.shape[1] <= 0:
         raise ValueError("参考音频不含有效声道")
+    waveform = waveform[:1].to(dtype=torch.float32).contiguous()
     if not torch.isfinite(waveform).all().item():
         raise ValueError("参考音频包含 NaN 或无穷值")
-    waveform = waveform.clamp(-1.0, 1.0).contiguous()
     if float(waveform.abs().amax().item()) <= 1e-7:
         raise ValueError("裁剪后的参考音频是静音，模型无法从中提取有效参考")
     return {"waveform": waveform, "sample_rate": sample_rate}

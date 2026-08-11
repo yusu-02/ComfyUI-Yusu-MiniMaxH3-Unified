@@ -217,10 +217,10 @@ class PluginTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "有限数字"):
             media.finite_float(None, "值")
 
-    def test_audio_normalization_is_stereo_and_rejects_invalid_values(self):
-        normalized = media.normalize_audio_for_h3(audio(2.0, channels=1))
-        self.assertEqual(normalized["waveform"].shape, (1, 2, 64000))
-        self.assertTrue(torch.equal(normalized["waveform"][:, 0], normalized["waveform"][:, 1]))
+    def test_audio_normalization_preserves_official_channels_and_values(self):
+        normalized = media.normalize_audio_for_h3(audio(2.0, channels=1, value=1.25))
+        self.assertEqual(normalized["waveform"].shape, (1, 1, 64000))
+        self.assertTrue(torch.all(normalized["waveform"] == 1.25))
         with self.assertRaisesRegex(ValueError, "静音"):
             media.normalize_audio_for_h3(audio(value=0.0))
         bad = audio()
@@ -408,7 +408,7 @@ class PluginTests(unittest.TestCase):
                 )
         self.assertTrue(container.seek_calls)
         self.assertLess(container.decoded, 20)
-        self.assertEqual(loaded["waveform"].shape, (1, 2, 20))
+        self.assertEqual(loaded["waveform"].shape, (1, 1, 20))
         self.assertEqual(duration, 2.0)
 
     def test_embedded_audio_alignment_pads_late_audio_start(self):
@@ -494,8 +494,8 @@ class PluginTests(unittest.TestCase):
                     }
                 )
         self.assertEqual(duration, 2.0)
-        self.assertEqual(loaded["waveform"].shape, (1, 2, 20))
-        self.assertTrue(torch.equal(loaded["waveform"][..., :2], torch.zeros(1, 2, 2)))
+        self.assertEqual(loaded["waveform"].shape, (1, 1, 20))
+        self.assertTrue(torch.equal(loaded["waveform"][..., :2], torch.zeros(1, 1, 2)))
         self.assertTrue(torch.all(loaded["waveform"][..., 2:] == 0.5))
 
     def test_omni_execute_passes_audio_to_official_node(self):
@@ -514,7 +514,7 @@ class PluginTests(unittest.TestCase):
         )
         self.assertIn("ref_audio_1", official.MiniMaxH3ReferenceToVideo.last_call["audios"])
         self.assertIsInstance(result[2], dict)
-        self.assertEqual(result[2]["waveform"].shape, (1, 2, 64000))
+        self.assertEqual(result[2]["waveform"].shape, (1, 1, 64000))
         self.assertEqual(result[2]["sample_rate"], 32000)
 
     def test_auto_length_uses_longest_reference_audio_and_official_grid(self):
