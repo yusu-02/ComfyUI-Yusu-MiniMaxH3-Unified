@@ -312,6 +312,13 @@ class PluginTests(unittest.TestCase):
                 loaded = media.load_image({"path": f"{media.MEDIA_SUBDIR}/oriented.jpg"})
             self.assertEqual(loaded.shape, (1, 2, 3, 3))
 
+    def test_broken_image_is_reported_as_upload_validation_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "broken.png"
+            path.write_bytes(b"not a png")
+            with self.assertRaisesRegex(ValueError, "图片文件已损坏"):
+                media.validate_uploaded_file(path, "image")
+
     def test_ffprobe_validates_real_wav_without_pyav(self):
         if shutil.which("ffprobe") is None:
             self.skipTest("ffprobe is not installed")

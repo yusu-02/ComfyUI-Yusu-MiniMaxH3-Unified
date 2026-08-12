@@ -237,13 +237,16 @@ def probe_media(path: Path) -> dict[str, Any]:
 
 def validate_uploaded_file(path: Path, kind: str) -> dict[str, Any]:
     if kind == "image":
-        with Image.open(path) as image:
-            expected = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".webp": "WEBP"}[path.suffix.lower()]
-            if image.format != expected:
-                raise ValueError(f"图片内容格式 {image.format or '未知'} 与扩展名不匹配")
-            if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
-                raise ValueError(f"图片尺寸过大或无效：{image.width}×{image.height}")
-            image.verify()
+        try:
+            with Image.open(path) as image:
+                expected = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".webp": "WEBP"}[path.suffix.lower()]
+                if image.format != expected:
+                    raise ValueError(f"图片内容格式 {image.format or '未知'} 与扩展名不匹配")
+                if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
+                    raise ValueError(f"图片尺寸过大或无效：{image.width}×{image.height}")
+                image.verify()
+        except (OSError, SyntaxError) as error:
+            raise ValueError("无法读取图片或图片文件已损坏") from error
         return {"duration": 0.0, "has_video": False, "has_audio": False}
     metadata = probe_media(path)
     if kind == "video":

@@ -35,6 +35,19 @@ function fileKind(file) {
     return Object.entries(FILE_EXTENSIONS).find(([, extensions]) => extensions.has(extension))?.[0] || null;
 }
 
+function clipboardMediaFiles(clipboardData) {
+    const itemFiles = Array.from(clipboardData?.items || [])
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile?.())
+        .filter(Boolean);
+    return (itemFiles.length ? itemFiles : Array.from(clipboardData?.files || [])).filter(fileKind);
+}
+
+function firstOpenMediaSlot(node, state, kind) {
+    const slots = kind === "image" ? IMAGE_SLOTS : kind === "video" ? VIDEO_SLOTS : AUDIO_SLOTS;
+    return slots.find((slot) => !state[slot]?.path && !linked(node, slot)) || null;
+}
+
 function widget(node, name) {
     return node.widgets?.find((item) => item.name === name);
 }
@@ -1013,7 +1026,11 @@ function buildPanel(node, stateWidget) {
         if (stateWidget.value !== normalized) stateWidget.value = normalized;
     };
     restoreState();
-    const root = element("div", { className: "h3u-panel-host" });
+    const root = element("div", {
+        className: "h3u-panel-host",
+        tabIndex: 0,
+        title: "点击面板后可按 Ctrl+V 粘贴图片、视频或音频",
+    });
     const content = element("div", { className: "h3u-panel" });
     root.append(content);
     const panelHeight = () => Math.max(24, Math.ceil(content.scrollHeight || content.getBoundingClientRect().height || 0) + 12);
@@ -1091,6 +1108,10 @@ function buildPanel(node, stateWidget) {
             const pairedAudioCount = PAIRED_AUDIO_SLOTS.filter((slot) => linked(node, slot) || state[slot]?.path).length;
             const audioCount = AUDIO_SLOTS.filter((slot) => linked(node, slot) || state[slot]?.path).length;
             content.append(element("h3", { textContent: `全模态参考 · 图片 ${imageCount}/9 · 视频 ${videoCount}/3 · 配对音频 ${pairedAudioCount}/3 · 独立音频 ${audioCount}/3` }));
+            content.append(element("div", {
+                className: "h3u-info",
+                textContent: "点击本面板后按 Ctrl+V，可将剪贴板中的图片、视频或音频自动加入第一个空槽位。",
+            }));
             const imageSlotCount = slotCount(state, "image_count", IMAGE_SLOTS, node);
             const videoSlotCount = slotCount(state, "video_count", VIDEO_SLOTS, node, PAIRED_AUDIO_SLOTS);
             const audioSlotCount = slotCount(state, "audio_count", AUDIO_SLOTS, node);
@@ -1148,6 +1169,36 @@ function buildPanel(node, stateWidget) {
             render();
         });
     };
+    root.addEventListener("paste", async (event) => {
+        if (widget(node, "mode")?.value !== "omni_reference") return;
+        const files = clipboardMediaFiles(event.clipboardData);
+        if (!files.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const errors = [];
+        let changed = false;
+        for (const file of files) {
+            const kind = fileKind(file);
+            const slot = firstOpenMediaSlot(node, state, kind);
+            if (!slot) {
+                errors.push(`${kind === "image" ? "图片" : kind === "video" ? "视频" : "音频"}槽位已满：${file.name}`);
+                continue;
+            }
+            try {
+                const uploaded = await uploadFile(file);
+                if (uploaded.kind !== kind) throw new Error(`媒体类型不匹配：${file.name}`);
+                state[slot] = { ...uploaded, trim_start: 0, trim_end: uploaded.duration || 0, use_audio: false };
+                changed = true;
+            } catch (error) {
+                errors.push(`${file.name}：${error.message}`);
+            }
+        }
+        if (changed) {
+            setState(node, stateWidget, state);
+            scheduleRender();
+        }
+        if (errors.length) alert(errors.join("\n"));
+    });
     const bindPromptSource = () => {
         promptSourceUnsubscribe();
         promptSourceUnsubscribe = subscribePromptSource(node, updateAudioStatus);

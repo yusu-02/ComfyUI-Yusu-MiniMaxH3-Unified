@@ -11,6 +11,7 @@ globalThis.h3Test = {
     removeLegacyModelInputs, alignedFrameCountFromSeconds, roundHalfToEven,
     canonicalInputName, externalInputName, normalizeState, videoAudioAvailability,
     readJsonResponse, syncDurationControls, expandCollapsedAutogrowInputs,
+    clipboardMediaFiles, firstOpenMediaSlot,
 };`;
 eval(source);
 
@@ -123,6 +124,22 @@ assert.equal(modeNode.inputs[2].link, 21);
 
 assert.deepEqual(h3Test.normalizeState("[1,2]"), {});
 assert.equal(h3Test.externalInputName("ref_audio_1"), "ref_audio_0");
+
+const pastedImage = { name: "clipboard.png" };
+const pastedAudio = { name: "voice.wav" };
+assert.deepEqual(h3Test.clipboardMediaFiles({
+    items: [
+        { kind: "string", getAsFile: () => null },
+        { kind: "file", getAsFile: () => pastedImage },
+        { kind: "file", getAsFile: () => pastedAudio },
+        { kind: "file", getAsFile: () => ({ name: "notes.txt" }) },
+    ],
+}), [pastedImage, pastedAudio]);
+const pasteNode = graphNode([
+    { name: "mode.ref_images.ref_image_0", link: 30 },
+]);
+assert.equal(h3Test.firstOpenMediaSlot(pasteNode, {}, "image"), "ref_image_2");
+assert.equal(h3Test.firstOpenMediaSlot(pasteNode, { ref_audio_1: { path: "voice.wav" } }, "audio"), "ref_audio_2");
 
 const collapsedNode = graphNode([
     { name: "mode.ref_images", type: "*" },
