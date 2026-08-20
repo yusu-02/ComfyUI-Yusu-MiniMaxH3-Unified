@@ -11,7 +11,7 @@ globalThis.h3Test = {
     removeLegacyModelInputs, alignedFrameCountFromSeconds, roundHalfToEven,
     canonicalInputName, externalInputName, normalizeState, videoAudioAvailability,
     readJsonResponse, syncDurationControls, expandCollapsedAutogrowInputs,
-    clipboardMediaFiles, firstOpenMediaSlot,
+    clipboardMediaFiles, firstOpenMediaSlot, visibleSlots, referenceItems, normalizePromptMentions,
 };`;
 eval(source);
 
@@ -32,6 +32,27 @@ assert.equal(h3Test.alignedFrameCountFromSeconds(20), 481);
 assert.equal(h3Test.roundHalfToEven(124.5), 124);
 assert.equal(h3Test.roundHalfToEven(125.5), 126);
 assert.equal(h3Test.videoAudioAvailability({ has_audio: false }), "absent");
+
+const compactSlots = ["slot_1", "slot_2", "slot_3", "slot_4"];
+assert.deepEqual(h3Test.visibleSlots(compactSlots, 4, { inputs: [] }, {}), ["slot_1"]);
+assert.deepEqual(h3Test.visibleSlots(compactSlots, 4, { inputs: [] }, {
+    slot_1: { path: "first.png" },
+    slot_4: { path: "fourth.png" },
+}), ["slot_1", "slot_2", "slot_4"]);
+
+const tagNode = { inputs: [] };
+const taggedMedia = {
+    ref_image_1: { path: "portrait.png" },
+    ref_video_1: { path: "motion.mp4", use_audio: true },
+    ref_audio_1: { path: "voice.wav" },
+};
+assert.deepEqual(h3Test.referenceItems(tagNode, taggedMedia).map(({ tag, kind, slot }) => [tag, kind, slot]), [
+    ["<Picture 1>", "image", "ref_image_1"],
+    ["<Audio 1>", "audio", "ref_video_1"],
+    ["<Video 1>", "video", "ref_video_1"],
+    ["<Audio 2>", "audio", "ref_audio_1"],
+]);
+assert.equal(h3Test.normalizePromptMentions("让 @图片1 在 @视频 2 中使用 @音频3 说话"), "让 <Picture 1> 在 <Video 2> 中使用 <Audio 3> 说话");
 
 const durationNode = {
     widgets: [
@@ -174,8 +195,14 @@ await assert.rejects(() => h3Test.readJsonResponse({
 }, "上传"), /服务端响应异常/);
 
 const css = fs.readFileSync(new URL("../web/minimax_h3_unified.css", import.meta.url), "utf8");
-assert.match(css, /grid-template-rows:22px 170px 30px/);
+assert.match(css, /grid-template-rows:22px 155px 30px/);
 assert.match(css, /\.h3u-row-header/);
 assert.match(css, /\.h3u-row-actions/);
+assert.match(css, /\.h3u-panel-heading/);
+assert.match(css, /\.h3u-details/);
+assert.match(css, /\.h3u-at-choice/);
+assert.match(css, /\.h3u-at-preview/);
+assert.match(css, /resize:vertical/);
+assert.match(css, /repeat\(auto-fit,minmax\(180px,1fr\)\)/);
 
 console.log("frontend tests passed");

@@ -256,6 +256,10 @@ class PluginTests(unittest.TestCase):
     def test_media_state_and_path_security(self):
         state = {"ref_audio_1": {"path": "minimax_h3_unified/a.wav"}}
         self.assertEqual(nodes.parse_media_state(json.dumps(state)), state)
+        self.assertEqual(
+            nodes.normalize_prompt_mentions("让 @图片1 在 @视频 2 中使用 @音频3 说话"),
+            "让 <Picture 1> 在 <Video 2> 中使用 <Audio 3> 说话",
+        )
         with self.assertRaisesRegex(ValueError, "不是有效 JSON"):
             nodes.parse_media_state("{bad")
         with self.assertRaisesRegex(ValueError, "必须是 JSON 对象"):

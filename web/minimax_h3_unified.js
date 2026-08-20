@@ -29,6 +29,8 @@ const WAVEFORM_CACHE = new Map();
 const MAX_WAVEFORM_CACHE_ITEMS = 12;
 const MAX_WAVEFORM_BYTES = 64 * 1024 * 1024;
 const MAX_WAVEFORM_SECONDS = 300;
+const PROMPT_EDITORS = new WeakMap();
+const PROMPT_HEIGHT_PROPERTY = "minimax_h3_prompt_height";
 
 function fileKind(file) {
     const extension = String(file?.name || "").split(".").pop().toLowerCase();
@@ -480,8 +482,32 @@ function element(tag, properties = {}, children = []) {
     return item;
 }
 
-function button(text, action) {
-    return element("button", { textContent: text, onclick: action, className: "h3u-button" });
+function button(text, action, variant = "") {
+    const suffix = variant ? ` h3u-button-${variant}` : "";
+    return element("button", { textContent: text, onclick: action, className: `h3u-button${suffix}` });
+}
+
+function panelHeading(title, stats = []) {
+    return element("div", { className: "h3u-panel-heading" }, [
+        element("h3", { textContent: title }),
+        element("div", { className: "h3u-badges" }, stats.map((text) =>
+            element("span", { className: "h3u-badge", textContent: text })
+        )),
+    ]);
+}
+
+function sectionHeading(title, hint = "") {
+    return element("div", { className: "h3u-section-heading" }, [
+        element("strong", { textContent: title }),
+        hint ? element("span", { textContent: hint }) : null,
+    ].filter(Boolean));
+}
+
+function helpDetails(summary, children) {
+    return element("details", { className: "h3u-details" }, [
+        element("summary", { textContent: summary }),
+        element("div", { className: "h3u-details-body" }, children),
+    ]);
 }
 
 function hideWidget(widget) {
@@ -807,7 +833,7 @@ function setupWaveformPreview(canvas, url, item) {
 
 function mediaRow(node, stateWidget, state, slot, kind, rerender) {
     const item = state[slot];
-    const row = element("section", { className: "h3u-row" });
+    const row = element("section", { className: `h3u-row h3u-row-${kind}` });
     const ordinal = Number(slot.match(/\d+$/)?.[0] || 0);
     const isPairedAudio = slot.startsWith("ref_video_audio_");
     const label = LABELS[slot] || (kind === "image"
@@ -887,35 +913,245 @@ function mediaRow(node, stateWidget, state, slot, kind, rerender) {
         }
     }
     row.append(element("div", { className: "h3u-row-actions" }, [
-        button("替换", () => choose()),
+        button("替换", () => choose(), "secondary"),
         button("删除", () => {
             delete state[slot];
             setState(node, stateWidget, state);
             rerender();
-        }),
+        }, "danger"),
     ]));
     return row;
 }
 
-function mapping(node, state) {
-    const tags = [];
+function referenceItems(node, state) {
+    const items = [];
     const active = (slot) => linked(node, slot) || Boolean(state[slot]?.path);
     const source = (slot) => linked(node, slot) ? `外部 ${externalInputName(slot)}` : state[slot]?.name || "节点内文件";
-    IMAGE_SLOTS.filter(active).forEach((slot, index) => tags.push(`<Picture ${index + 1}> ← ${slot} (${source(slot)})`));
+    IMAGE_SLOTS.filter(active).forEach((slot, index) => items.push({
+        tag: `<Picture ${index + 1}>`, kind: "image", slot, media: state[slot], description: `(${source(slot)})`,
+    }));
     let audioIndex = 1;
     let videoIndex = 1;
     VIDEO_SLOTS.filter(active).forEach((slot) => {
         const audioSlot = slot.replace("ref_video_", "ref_video_audio_");
-        if (active(audioSlot)) tags.push(`<Audio ${audioIndex++}> ← ${audioSlot} (${source(audioSlot)})`);
+        if (active(audioSlot)) items.push({
+            tag: `<Audio ${audioIndex++}>`, kind: "audio", slot: audioSlot, media: state[audioSlot], description: `(${source(audioSlot)})`,
+        });
         else if (
             !linked(node, slot)
             && state[slot]?.use_audio
             && videoAudioAvailability(state[slot]) !== "absent"
-        ) tags.push(`<Audio ${audioIndex++}> ← ${slot} 原声`);
-        tags.push(`<Video ${videoIndex++}> ← ${slot} (${source(slot)})`);
+        ) items.push({ tag: `<Audio ${audioIndex++}>`, kind: "audio", slot, media: state[slot], description: "原声" });
+        items.push({
+            tag: `<Video ${videoIndex++}>`, kind: "video", slot, media: state[slot], description: `(${source(slot)})`,
+        });
     });
-    AUDIO_SLOTS.filter(active).forEach((slot) => tags.push(`<Audio ${audioIndex++}> ← ${slot} (${source(slot)})`));
-    return tags.join("\n") || "暂无节点内参考素材";
+    AUDIO_SLOTS.filter(active).forEach((slot) => items.push({
+        tag: `<Audio ${audioIndex++}>`, kind: "audio", slot, media: state[slot], description: `(${source(slot)})`,
+    }));
+    return items;
+}
+
+function mapping(node, state) {
+    const items = referenceItems(node, state);
+    return items.map((item) => `${item.tag} ← ${item.slot} ${item.description}`).join("\n") || "暂无节点内参考素材";
+}
+
+function promptInput(widget) {
+    const candidates = [widget?.inputEl, widget?.element, widget?.domElement, widget?.el];
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        if (typeof candidate.selectionStart === "number") return candidate;
+        const input = candidate.querySelector?.("textarea, input");
+        if (input && typeof input.selectionStart === "number") return input;
+    }
+    return null;
+}
+
+function setPromptValue(node, promptWidget, value) {
+    promptWidget.value = value;
+    promptWidget.callback?.(value);
+    node.graph?.setDirtyCanvas?.(true, true);
+}
+
+function promptMentionLabel(item) {
+    const label = { image: "图片", video: "视频", audio: "音频" }[item.kind];
+    const number = item.tag.match(/\d+/)?.[0] || "";
+    return `@${label}${number}`;
+}
+
+function normalizePromptMentions(value) {
+    return String(value || "")
+        .replace(/@图片\s*(\d+)/g, "<Picture $1>")
+        .replace(/@视频\s*(\d+)/g, "<Video $1>")
+        .replace(/@音频\s*(\d+)/g, "<Audio $1>");
+}
+
+function promptMentionChip(item) {
+    const label = promptMentionLabel(item);
+    const icon = { image: "▧", video: "▶", audio: "♫" }[item.kind];
+    const chip = element("span", {
+        className: `h3u-prompt-mention h3u-prompt-mention-${item.kind}`,
+        contentEditable: "false",
+        title: `${label} · ${item.media?.name || item.kind}`,
+        ariaLabel: label,
+    });
+    chip.dataset.mention = label;
+    if (item.kind === "image" && item.media?.path) {
+        chip.append(element("img", { src: viewUrl(item.media.path), className: "h3u-prompt-thumb", alt: "" }));
+    } else {
+        chip.append(element("span", { className: `h3u-prompt-icon h3u-prompt-icon-${item.kind}`, textContent: icon, ariaHidden: "true" }));
+    }
+    chip.append(element("span", { textContent: label }));
+    return chip;
+}
+
+function promptEditorValue(editor) {
+    return Array.from(editor.childNodes).map((item, index) => {
+        if (item.dataset?.mention) return item.dataset.mention;
+        if (item.nodeName === "BR") return "\n";
+        return `${item.nodeName === "DIV" && index ? "\n" : ""}${item.textContent || ""}`;
+    }).join("");
+}
+
+function renderPromptEditor(editor, node, state, value) {
+    const references = new Map(referenceItems(node, state).map((item) => [promptMentionLabel(item), item]));
+    const parts = String(value || "").split(/(@(?:图片|视频|音频)\d+)/g);
+    editor.replaceChildren(...parts.map((part) => {
+        const item = references.get(part);
+        return item ? promptMentionChip(item) : document.createTextNode(part);
+    }));
+    if (!editor.childNodes.length || editor.lastChild?.dataset?.mention) editor.append(document.createTextNode(""));
+}
+
+function editorRange(editor) {
+    const selection = window.getSelection();
+    if (selection?.rangeCount && editor.contains(selection.anchorNode)) return selection.getRangeAt(0).cloneRange();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    return range;
+}
+
+function setEditorCaret(range) {
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+}
+
+function attachPromptEditor(node, getState, resizeNode) {
+    const promptWidget = widget(node, "prompt");
+    const input = promptInput(promptWidget);
+    if (!promptWidget || !input || PROMPT_EDITORS.has(node)) return false;
+
+    const host = input.parentElement;
+    if (!host) return false;
+    const inputHeight = Math.max(42, Math.ceil(input.offsetHeight || input.scrollHeight || 0));
+    const editor = element("div", {
+        className: "h3u-prompt-editor",
+        contentEditable: "true",
+        role: "textbox",
+        ariaLabel: "提示词，输入 @ 引用下方已添加的媒体",
+        spellcheck: false,
+    });
+    editor.style.minHeight = `${inputHeight}px`;
+    const savedHeight = Number(node.properties?.[PROMPT_HEIGHT_PROPERTY]);
+    if (Number.isFinite(savedHeight) && savedHeight > inputHeight) {
+        editor.style.height = `${Math.min(360, savedHeight)}px`;
+    }
+    host.style.minHeight = `${inputHeight}px`;
+    input.style.display = "none";
+    host.append(editor);
+    const originalComputeSize = promptWidget.computeSize?.bind(promptWidget);
+    const editorHeight = () => Math.max(inputHeight, Math.ceil(editor.offsetHeight || editor.scrollHeight || 0));
+    promptWidget.computeSize = (...args) => {
+        const original = originalComputeSize?.(...args) || [0, 0];
+        return [original[0], Math.max(original[1] || 0, editorHeight() + 8)];
+    };
+    const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+        const height = editorHeight();
+        host.style.minHeight = `${height}px`;
+        if (node.properties?.[PROMPT_HEIGHT_PROPERTY] !== height) {
+            node.properties = { ...(node.properties || {}), [PROMPT_HEIGHT_PROPERTY]: height };
+        }
+        resizeNode?.();
+    }) : null;
+    resizeObserver?.observe(editor);
+
+    let menu = null;
+    let mentionRange = null;
+    const close = () => {
+        menu?.remove();
+        menu = null;
+        mentionRange = null;
+    };
+    const choose = (item) => {
+        const range = mentionRange;
+        close();
+        if (!range) return;
+        range.deleteContents();
+        const chip = promptMentionChip(item);
+        const spacer = document.createTextNode("");
+        range.insertNode(chip);
+        chip.after(spacer);
+        range.setStart(spacer, 0);
+        range.collapse(true);
+        editor.focus();
+        setEditorCaret(range);
+        setPromptValue(node, promptWidget, promptEditorValue(editor));
+    };
+    const open = () => {
+        close();
+        mentionRange = editorRange(editor);
+        const references = referenceItems(node, getState());
+        const choices = references.length ? references.map((item) => {
+            const icon = { image: "▧", video: "▶", audio: "♫" }[item.kind];
+            const preview = item.kind === "image" && item.media?.path
+                ? element("img", { src: viewUrl(item.media.path), className: "h3u-at-preview", alt: "" })
+                : element("span", { className: `h3u-at-icon h3u-at-icon-${item.kind}`, textContent: icon });
+            return element("button", {
+                type: "button",
+                className: "h3u-at-choice",
+                textContent: "",
+                onclick: () => choose(item),
+            }, [preview, element("span", { textContent: promptMentionLabel(item) })]);
+        }) : [element("span", { className: "h3u-at-empty", textContent: "请先在下方添加图片、视频或音频" })];
+        menu = element("div", { className: "h3u-at-menu", role: "menu" }, choices);
+        const rangeRect = mentionRange.getBoundingClientRect();
+        const rect = rangeRect.width || rangeRect.height ? rangeRect : editor.getBoundingClientRect();
+        menu.style.left = `${rect.left}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+        document.body.append(menu);
+    };
+    const onKeyDown = (event) => {
+        event.stopPropagation();
+        if (event.key === "@") {
+            event.preventDefault();
+            open();
+        } else if (event.key === "Escape") close();
+    };
+    const onBlur = () => setTimeout(close, 150);
+    const sync = () => setPromptValue(node, promptWidget, promptEditorValue(editor));
+    const refresh = () => {
+        if (promptEditorValue(editor) !== String(promptWidget.value || "")) {
+            renderPromptEditor(editor, node, getState(), promptWidget.value);
+        }
+    };
+    editor.addEventListener("input", sync);
+    editor.addEventListener("keydown", onKeyDown);
+    editor.addEventListener("blur", onBlur);
+    renderPromptEditor(editor, node, getState(), promptWidget.value);
+    PROMPT_EDITORS.set(node, { refresh, destroy: () => {
+        close();
+        resizeObserver?.disconnect();
+        if (originalComputeSize) promptWidget.computeSize = originalComputeSize;
+        else delete promptWidget.computeSize;
+        editor.remove();
+        input.style.removeProperty("display");
+        host.style.removeProperty("min-height");
+        PROMPT_EDITORS.delete(node);
+    }});
+    return true;
 }
 
 function slotCount(state, key, slots, node = null, relatedSlots = []) {
@@ -932,6 +1168,17 @@ function slotCount(state, key, slots, node = null, relatedSlots = []) {
         return Math.min(slots.length, Math.max(used, Math.max(0, saved)));
     }
     return Math.max(1, used);
+}
+
+function visibleSlots(slots, count, node, state, relatedSlots = []) {
+    const available = slots.slice(0, count);
+    const active = (slot, index) => Boolean(
+        state[slot]?.path
+        || linked(node, slot)
+        || (relatedSlots[index] && (state[relatedSlots[index]]?.path || linked(node, relatedSlots[index])))
+    );
+    const nextEmpty = available.findIndex((slot, index) => !active(slot, index));
+    return available.filter((slot, index) => active(slot, index) || index === nextEmpty);
 }
 
 function countSelector(node, stateWidget, state, label, key, slots, rerender, relatedSlots = []) {
@@ -987,7 +1234,7 @@ function audioReferenceStatus(node, audioTags, promptValue = promptSource(node))
         };
     }
 
-    const promptText = String(source.value || "").toLowerCase();
+    const promptText = normalizePromptMentions(source.value).toLowerCase();
     const missing = audioTags.filter((tag) => !promptText.includes(tag.toLowerCase()));
     if (audioVaeConnected && !missing.length) {
         return {
@@ -1024,6 +1271,7 @@ function buildPanel(node, stateWidget) {
         state = normalizeState(stateWidget.value);
         const normalized = JSON.stringify(state);
         if (stateWidget.value !== normalized) stateWidget.value = normalized;
+        PROMPT_EDITORS.get(node)?.refresh();
     };
     restoreState();
     const root = element("div", {
@@ -1095,9 +1343,15 @@ function buildPanel(node, stateWidget) {
             }
         }
         if (mode === "text_to_video") {
-            content.append(element("div", { textContent: "文生视频模式：媒体输入会被忽略。", className: "h3u-note" }));
+            content.append(
+                panelHeading("文生视频"),
+                element("div", { textContent: "当前模式只使用提示词，节点内媒体不会参与生成。", className: "h3u-empty-state" }),
+            );
         } else if (mode === "first_last_frame") {
-            content.append(element("h3", { textContent: "首尾帧（外部端口逐槽覆盖节点内素材）" }));
+            content.append(
+                panelHeading("首尾帧", ["外部端口优先"]),
+                sectionHeading("画面锚点", "首帧与尾帧可独立设置"),
+            );
             content.append(element("div", { className: "h3u-media-grid h3u-frame-grid" }, [
                 mediaRow(node, stateWidget, state, "first_frame", "image", scheduleRender),
                 mediaRow(node, stateWidget, state, "last_frame", "image", scheduleRender),
@@ -1107,44 +1361,50 @@ function buildPanel(node, stateWidget) {
             const videoCount = VIDEO_SLOTS.filter((slot) => linked(node, slot) || state[slot]?.path).length;
             const pairedAudioCount = PAIRED_AUDIO_SLOTS.filter((slot) => linked(node, slot) || state[slot]?.path).length;
             const audioCount = AUDIO_SLOTS.filter((slot) => linked(node, slot) || state[slot]?.path).length;
-            content.append(element("h3", { textContent: `全模态参考 · 图片 ${imageCount}/9 · 视频 ${videoCount}/3 · 配对音频 ${pairedAudioCount}/3 · 独立音频 ${audioCount}/3` }));
-            content.append(element("div", {
-                className: "h3u-info",
-                textContent: "点击本面板后按 Ctrl+V，可将剪贴板中的图片、视频或音频自动加入第一个空槽位。",
-            }));
+            content.append(panelHeading("全模态参考", [
+                `图片 ${imageCount}/9`,
+                `视频 ${videoCount}/3`,
+                `配对音频 ${pairedAudioCount}/3`,
+                `独立音频 ${audioCount}/3`,
+            ]));
             const imageSlotCount = slotCount(state, "image_count", IMAGE_SLOTS, node);
             const videoSlotCount = slotCount(state, "video_count", VIDEO_SLOTS, node, PAIRED_AUDIO_SLOTS);
             const audioSlotCount = slotCount(state, "audio_count", AUDIO_SLOTS, node);
-            content.append(element("div", { className: "h3u-counts" }, [
+            const visibleImageSlots = visibleSlots(IMAGE_SLOTS, imageSlotCount, node, state);
+            const visibleVideoSlots = visibleSlots(VIDEO_SLOTS, videoSlotCount, node, state, PAIRED_AUDIO_SLOTS);
+            const visibleAudioSlots = visibleSlots(AUDIO_SLOTS, audioSlotCount, node, state);
+            content.append(element("div", { className: "h3u-counts h3u-toolbar" }, [
                 element("strong", { textContent: "节点内槽位" }),
                 countSelector(node, stateWidget, state, "参考图", "image_count", IMAGE_SLOTS, scheduleRender),
                 countSelector(node, stateWidget, state, "参考视频", "video_count", VIDEO_SLOTS, scheduleRender, PAIRED_AUDIO_SLOTS),
                 countSelector(node, stateWidget, state, "独立音频", "audio_count", AUDIO_SLOTS, scheduleRender),
             ]));
-            content.append(element("div", {
-                className: "h3u-info h3u-port-note",
-                textContent: "官方 ref_video_audio_0～ref_video_audio_2 是同编号参考视频的配对音轨：ref_video_audio_1 对应 ref_video_1。节点内“视频 1～3 配对音频”与这些接口逐一对应；同槽同时存在时，外部接口优先。ref_audio_0～ref_audio_2 则是独立参考音频。",
-            }));
             const mapText = mapping(node, state);
-            content.append(element("pre", { textContent: mapText, className: "h3u-map" }));
+            content.append(helpDetails("使用帮助与标签映射", [
+                element("p", {
+                    className: "h3u-help-copy",
+                    textContent: "点击面板后按 Ctrl+V，可将剪贴板中的图片、视频或音频加入第一个空槽位。",
+                }),
+                element("p", {
+                    className: "h3u-help-copy",
+                    textContent: "ref_video_audio_0～2 是同编号视频的配对音轨；ref_audio_0～2 是独立参考音频。同槽存在节点内素材和外部接口时，外部接口优先。",
+                }),
+                element("pre", { textContent: mapText, className: "h3u-map" }),
+            ]));
             audioStatusTags = [...mapText.matchAll(/<Audio \d+>/g)].map((match) => match[0]);
             if (audioStatusTags.length) {
                 audioStatusElement = element("div");
                 content.append(audioStatusElement);
                 updateAudioStatus();
             }
-            if (Boolean(widget(node, "auto_length_from_audio")?.value)) {
-                const hasUsableAudioReference = audioStatusTags.length > 0;
-                content.append(element("div", {
-                    className: "h3u-info",
-                    textContent: hasUsableAudioReference
-                        ? "已启用有音频时自动长度：手动时长已锁定。运行时读取裁剪后的实际音频时长，以最长一段为基准，按 24 FPS 对齐到 H3 的 17k+5 帧网格。"
-                        : "已启用有音频时自动长度：手动时长已锁定；当前没有有效参考音频，执行时会回退到锁定前保存的手动秒数。",
-                }));
+            if (visibleImageSlots.length) {
+                content.append(
+                    sectionHeading("参考图片", `${imageCount}/${imageSlotCount} 已使用`),
+                    element("div", { className: "h3u-media-grid h3u-image-grid" }, visibleImageSlots.map((slot) => mediaRow(node, stateWidget, state, slot, "image", scheduleRender))),
+                );
             }
-            content.append(element("div", { className: "h3u-media-grid h3u-image-grid" }, IMAGE_SLOTS.slice(0, imageSlotCount).map((slot) => mediaRow(node, stateWidget, state, slot, "image", scheduleRender))));
-            const videoPairs = VIDEO_SLOTS.slice(0, videoSlotCount).map((slot, index) => {
-                const audioSlot = PAIRED_AUDIO_SLOTS[index];
+            const videoPairs = visibleVideoSlots.map((slot) => {
+                const audioSlot = PAIRED_AUDIO_SLOTS[VIDEO_SLOTS.indexOf(slot)];
                 const pair = element("div", { className: "h3u-video-pair" }, [
                     mediaRow(node, stateWidget, state, slot, "video", scheduleRender),
                     mediaRow(node, stateWidget, state, audioSlot, "audio", scheduleRender),
@@ -1157,8 +1417,18 @@ function buildPanel(node, stateWidget) {
                 }
                 return pair;
             });
-            content.append(element("div", { className: "h3u-media-grid" }, videoPairs));
-            content.append(element("div", { className: "h3u-media-grid" }, AUDIO_SLOTS.slice(0, audioSlotCount).map((slot) => mediaRow(node, stateWidget, state, slot, "audio", scheduleRender))));
+            if (videoPairs.length) {
+                content.append(
+                    sectionHeading("参考视频", `${videoPairs.length} 组视频与配对音轨`),
+                    element("div", { className: "h3u-media-grid" }, videoPairs),
+                );
+            }
+            if (visibleAudioSlots.length) {
+                content.append(
+                    sectionHeading("独立参考音频", `${audioCount}/${audioSlotCount} 已使用`),
+                    element("div", { className: "h3u-media-grid" }, visibleAudioSlots.map((slot) => mediaRow(node, stateWidget, state, slot, "audio", scheduleRender))),
+                );
+            }
         }
         fitNode();
     };
@@ -1224,6 +1494,7 @@ function buildPanel(node, stateWidget) {
         const original = promptWidget.callback;
         promptWidget.callback = function () {
             const result = original?.apply(this, arguments);
+            PROMPT_EDITORS.get(node)?.refresh();
             updateAudioStatus();
             return result;
         };
@@ -1291,6 +1562,7 @@ function buildPanel(node, stateWidget) {
     const originalRemoved = node.onRemoved;
     node.onRemoved = function () {
         observer?.disconnect();
+        PROMPT_EDITORS.get(node)?.destroy();
         promptSourceUnsubscribe();
         cancelAnimationFrame(resizeFrame);
         cancelAnimationFrame(renderFrame);
@@ -1304,6 +1576,7 @@ function buildPanel(node, stateWidget) {
     };
     bindPromptSource();
     syncDurationControls(node);
+    requestAnimationFrame(() => attachPromptEditor(node, () => state, fitNode));
     scheduleRender();
 }
 

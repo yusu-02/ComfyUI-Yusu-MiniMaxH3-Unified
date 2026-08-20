@@ -48,6 +48,13 @@ def parse_media_state(value: str | dict[str, Any] | None) -> dict[str, dict[str,
     return {str(key): item for key, item in state.items() if isinstance(item, dict)}
 
 
+def normalize_prompt_mentions(prompt: str) -> str:
+    value = str(prompt or "")
+    for label, tag in (("图片", "Picture"), ("视频", "Video"), ("音频", "Audio")):
+        value = re.sub(rf"@{label}\s*(\d+)", rf"<{tag} \1>", value)
+    return value
+
+
 def resolve_slots(
     prefix: str,
     count: int,
@@ -344,6 +351,7 @@ class MiniMaxH3Unified(io.ComfyNode):
             ref_video_audios = values.get("ref_video_audios", ref_video_audios)
             ref_audios = values.get("ref_audios", ref_audios)
 
+        prompt = normalize_prompt_mentions(prompt)
         external: dict[str, Any] = {}
         for prefix, values in (
             ("ref_image", ref_images),
